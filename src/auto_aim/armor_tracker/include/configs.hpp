@@ -18,10 +18,25 @@ struct ArmorObservationNoiseConfig {
   double yaw_error_rad;
 };
 
-struct RobotConfig {
-  double max_match_distance_m;
-  double max_match_yaw_diff_degree;
+struct YawPitchDistanceConfig {
+  double yaw_pitch_noise; // 注意是球坐标系从原点看过去的噪声
+  // NOTE:自适应观测噪声from济喵，距离噪声和角度正相关，角度噪声和距离正相关
+  double basic_distance_noise;
+  double distance_noise_log_scale; // 缩放因子
+  double basic_armor_yaw_noise;
+  double armor_yaw_log_divisor; // 衰减因子
+};
+
+struct ArmorMatchConfig {
+  [[deprecated]] double max_match_distance_m;
+  [[deprecated]] double max_match_yaw_diff_degree;
   double max_match_mahalanobis_distance;
+  // NOTE: 装甲板匹配是在重投影优化之前，即还得接着用PNP的ypd噪声算马氏距离
+  YawPitchDistanceConfig ypd_conf;
+};
+
+struct RobotConfig {
+  ArmorMatchConfig armor_match_conf;
   int first_update_batch_size; // 冷启动时第一次优化时最少的k
   double lost_threshold_sec;   // 超时重置因子图的阈值
   // 先验噪声

@@ -35,9 +35,10 @@ public:
   matchArmor(const std::vector<ArmorPositionYaw> &armors,
              const ArmorPositionYaw &obs, double max_match_distance,
              double max_match_yaw_diff);
+  // NOTE: 注意其传入的协方差不包含观测噪声部分，依赖ypda协方差输入
   static std::vector<ArmorMatchResult>
   matchArmor(const std::vector<std::pair<ArmorPositionYaw, Eigen::Matrix4d>>
-                 &armors_covs,
+                 &armors_ypdacovs,
              const ArmorPositionYaw &obs, double match_thres);
 };
 
@@ -91,6 +92,7 @@ private:
                                    gtsam::Key armor_pose_key,
                                    const ArmorPositionRollPitchYawPoints &armor,
                                    std::uint64_t k) const;
+  void resetCovariances();
 
   quill::Logger *logger_;
   RobotConfig config_;

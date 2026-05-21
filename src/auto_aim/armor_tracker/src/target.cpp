@@ -4,6 +4,7 @@
 #include "factors.hpp"
 #include "math/angle_tools.hpp"
 #include "math/sigmoid_functions.hpp"
+#include "math/spherical_coordinate.hpp"
 #include "types.hpp"
 #include "types/Armor.hpp"
 #include "types/ArmorType.hpp"
@@ -60,11 +61,12 @@ std::vector<auto_aim::ArmorMatchResult> auto_aim::Target::matchArmor(
   std::vector<ArmorMatchResult> results;
   std::size_t i = 0;
   for (const auto &[armor, cov] : armors_covs) {
-    auto dx = obs.position.x() - armor.position.x();
-    auto dy = obs.position.y() - armor.position.y();
-    auto dz = obs.position.z() - armor.position.z();
+    Eigen::Vector3d dypd = tools::cartesian2Spherical(obs.position) -
+                           tools::cartesian2Spherical(armor.position);
     auto dr = armor.yaw.localCoordinates(obs.yaw).x();
-    Eigen::Vector4d error{dx, dy, dz, dr};
+    Eigen::Vector4d error{Eigen::Vector4d::Zero()};
+    error.head<3>() = dypd;
+    error(3) = dr;
     double mahalanobis_distance = error.transpose() * cov.ldlt().solve(error);
     if (mahalanobis_distance < match_thres)
       results.emplace_back(static_cast<ArmorIndex>(i), mahalanobis_distance,
@@ -73,8 +75,6 @@ std::vector<auto_aim::ArmorMatchResult> auto_aim::Target::matchArmor(
   }
   // 马氏距离贪心
   std::ranges::sort(results, std::ranges::less{}, &ArmorMatchResult::distance);
-  if (!results.empty())
-    std::cout << results.front().distance << std::endl;
   return results;
 }
 
@@ -93,6 +93,7 @@ auto_aim::RobotTarget::RobotTarget(quill::Logger *logger,
   track_state_.stamp_last_update = std::chrono::system_clock::from_time_t(0);
   track_state_.stamp_last_tracking = std::chrono::system_clock::from_time_t(0);
   track_state_.k = 0;
+  this->resetCovariances();
 }
 
 std::vector<auto_aim::ArmorPositionYaw>
@@ -140,14 +141,43 @@ auto_aim::RobotTarget::matchArmors(
   center_cov.topLeftCorner<3, 3>() = cov_X_pred;
   center_cov(3, 3) = cov_R_pred;
   auto armors = RobotTarget::getArmorsFromTargetState(state);
-  std::vector<std::pair<ArmorPositionYaw, Eigen::Matrix4d>> armors_covs;
-  for (const auto &armor : armors) {
-    Eigen::Vector3d offset = armor.position - state.center_position;
-    Eigen::Matrix4d J = Eigen::Matrix4d::Identity();
-    J(0, 3) = -offset.y();
-    J(1, 3) = offset.x();
-    Eigen::Matrix4d armor_cov = J * center_cov * J.transpose();
-    armors_covs.emplace_back(armor, armor_cov);
+  // HACK: 因为S中的R对每个观测都不同，即需要区分不同观测的四个协方差
+  // 先那个vec装着了，后续重构下接口最好
+  std::vector<std::vector<std::pair<ArmorPositionYaw, Eigen::Matrix4d>>>
+      armors_covs_vec;
+  for (const auto &obs : obs_armors_odom) {
+    std::vector<std::pair<ArmorPositionYaw, Eigen::Matrix4d>> armors_covs;
+    for (const auto &armor : armors) {
+      Eigen::Vector3d offset = armor.position - state.center_position;
+      Eigen::Matrix4d J = Eigen::Matrix4d::Identity();
+      J(0, 3) = -offset.y();
+      J(1, 3) = offset.x();
+      Eigen::Matrix4d P = J * center_cov * J.transpose();
+      // 将xyz协方差转换成ypd协方差
+      Eigen::Matrix3d P_xyz = P.topLeftCorner<3, 3>();
+      Eigen::Matrix3d J_sph =
+          tools::cartesian2SphericalJacobian(armor.position);
+      P.topLeftCorner<3, 3>() = J_sph * P_xyz * J_sph.transpose(); // P_ypd
+      auto obs_center_yaw = std::atan2(obs.position.y(), obs.position.x());
+      auto obs_incline_angle =
+          tools::limitRadian(obs.yaw.theta() - obs_center_yaw);
+      // XXX: 没有人类了
+      Eigen::VectorXd R_dig{
+          {config_.armor_match_conf.ypd_conf.yaw_pitch_noise,
+           config_.armor_match_conf.ypd_conf.yaw_pitch_noise,
+           log(config_.armor_match_conf.ypd_conf.distance_noise_log_scale *
+                   std::abs(obs_incline_angle) +
+               1) +
+               config_.armor_match_conf.ypd_conf.basic_distance_noise,
+           log(std::abs(obs.position.norm()) + 1) /
+                   config_.armor_match_conf.ypd_conf.armor_yaw_log_divisor +
+               config_.armor_match_conf.ypd_conf.basic_armor_yaw_noise},
+      };
+      Eigen::Matrix4d R = R_dig.asDiagonal();
+      Eigen::Matrix4d S = P + R;
+      armors_covs.emplace_back(armor, S);
+    }
+    armors_covs_vec.emplace_back(armors_covs);
   }
   std::vector<std::pair<ArmorPositionRollPitchYawPoints, ArmorIndex>>
       matched_armors;
@@ -155,8 +185,9 @@ auto_aim::RobotTarget::matchArmors(
   for (std::size_t i = 0;
        i < obs_armors_camera.size() && i < obs_armors_odom.size(); ++i) {
     const auto &obs = obs_armors_odom.at(i);
-    auto result = Target::matchArmor(armors_covs, obs,
-                                     config_.max_match_mahalanobis_distance);
+    auto result = Target::matchArmor(
+        armors_covs_vec.at(i), obs,
+        config_.armor_match_conf.max_match_mahalanobis_distance);
     if (!result.empty() &&
         !used_index.at(static_cast<int>(result.front().index))) {
       matched_armors.emplace_back(obs_armors_camera.at(i),
@@ -246,6 +277,7 @@ auto_aim::RobotTarget::track(const std::vector<types::Armor> &armors,
     track_state_.state = TrackState::State::LOST;
     track_state_.k = 0;
     isam2_ = gtsam::ISAM2{};
+    this->resetCovariances();
   }
   return track_state_.state;
 }
@@ -521,6 +553,8 @@ auto_aim::RobotTarget::update(
         tools::logisticFunction(isam2_.calculateEstimate<double>(B(0)),
                                 config_.radius_min, config_.radius_max);
     target_state.dz = isam2_.calculateEstimate<double>(Z(0));
+    // NOTE: isam2计算联合协方差的jointMarginalCovariance方法还在feature分支上
+    // 先用协方差凑合一下吧，等一手gtsam更新
     this->X_cov_ = isam2_.marginalCovariance(X(track_state_.k));
     this->V_cov_ = isam2_.marginalCovariance(V(track_state_.k));
     this->R_cov_ = isam2_.marginalCovariance(R(track_state_.k))(0, 0);
@@ -532,6 +566,25 @@ auto_aim::RobotTarget::update(
               rfl::enum_to_string(target_state.type), e.what(), track_state_.k);
     return {{}, TrackState::State::LOST};
   }
+}
+
+void auto_aim::RobotTarget::resetCovariances() {
+  X_cov_ = Eigen::Matrix3d::Zero();
+  X_cov_(0, 0) =
+      config_.translation_prior_noise.x * config_.translation_prior_noise.x;
+  X_cov_(1, 1) =
+      config_.translation_prior_noise.y * config_.translation_prior_noise.y;
+  X_cov_(2, 2) =
+      config_.translation_prior_noise.z * config_.translation_prior_noise.z;
+  V_cov_ = Eigen::Matrix3d::Zero();
+  V_cov_(0, 0) =
+      config_.velocity_prior_noise.x * config_.velocity_prior_noise.x;
+  V_cov_(1, 1) =
+      config_.velocity_prior_noise.y * config_.velocity_prior_noise.y;
+  V_cov_(2, 2) =
+      config_.velocity_prior_noise.z * config_.velocity_prior_noise.z;
+  R_cov_ = config_.yaw_prior_noise * config_.yaw_prior_noise;
+  W_cov_ = config_.vyaw_prior_noise * config_.vyaw_prior_noise;
 }
 
 auto_aim::OutpostTarget::OutpostTarget(quill::Logger *logger,
