@@ -32,6 +32,7 @@
 #include <functional>
 #include <iterator>
 #include <mutex>
+#include <optional>
 #include <utility>
 #include <vector>
 
@@ -57,7 +58,7 @@ std::vector<auto_aim::ArmorMatchResult> auto_aim::Target::matchArmor(
 std::vector<auto_aim::ArmorMatchResult> auto_aim::Target::matchArmor(
     const std::vector<std::pair<ArmorPositionYaw, Eigen::Matrix4d>>
         &armors_covs,
-    const ArmorPositionYaw &obs, double match_thres) {
+    const ArmorPositionYaw &obs) {
   std::vector<ArmorMatchResult> results;
   std::size_t i = 0;
   for (const auto &[armor, cov] : armors_covs) {
@@ -68,9 +69,7 @@ std::vector<auto_aim::ArmorMatchResult> auto_aim::Target::matchArmor(
     error.head<3>() = dypd;
     error(3) = dr;
     double mahalanobis_distance = error.transpose() * cov.ldlt().solve(error);
-    if (mahalanobis_distance < match_thres)
-      results.emplace_back(static_cast<ArmorIndex>(i), mahalanobis_distance,
-                           dr);
+    results.emplace_back(static_cast<ArmorIndex>(i), mahalanobis_distance, dr);
     ++i;
   }
   // 马氏距离贪心
@@ -185,10 +184,13 @@ auto_aim::RobotTarget::matchArmors(
   for (std::size_t i = 0;
        i < obs_armors_camera.size() && i < obs_armors_odom.size(); ++i) {
     const auto &obs = obs_armors_odom.at(i);
-    auto result = Target::matchArmor(
-        armors_covs_vec.at(i), obs,
-        config_.armor_match_conf.max_match_mahalanobis_distance);
-    if (!result.empty() &&
+    auto result = Target::matchArmor(armors_covs_vec.at(i), obs);
+    if (result.empty())
+      continue;
+    // NOTE: 在此处从马氏距离更新NIS失败队列
+    this->updateNisFailureDeque(result.front().distance);
+    if (result.front().distance <
+            config_.armor_match_conf.max_match_mahalanobis_distance &&
         !used_index.at(static_cast<int>(result.front().index))) {
       matched_armors.emplace_back(obs_armors_camera.at(i),
                                   result.front().index);
@@ -196,6 +198,20 @@ auto_aim::RobotTarget::matchArmors(
     }
   }
   return matched_armors;
+}
+
+void auto_aim::RobotTarget::updateNisFailureDeque(double distance) const {
+  this->nis_failure_deque_.push_back(distance > config_.nis_failure_thres);
+  if (nis_failure_deque_.size() > config_.nis_failure_window_size)
+    nis_failure_deque_.pop_front();
+}
+
+std::optional<bool> auto_aim::RobotTarget::nisFailured() const {
+  if (nis_failure_deque_.size() < config_.nis_failure_window_size)
+    return std::nullopt;
+  return (static_cast<double>(std::ranges::count(nis_failure_deque_, true)) /
+          config_.nis_failure_window_size) >
+         (config_.reset_failure_percentage_thres / 100.0);
 }
 
 auto_aim::RobotTargetState auto_aim::RobotTarget::getTargetStateFromArmor(
@@ -478,6 +494,13 @@ auto_aim::RobotTarget::update(
     LOG_INFO(logger_, "[Target {}]: Time out! dt{}.",
              rfl::enum_to_string(target_state_.type),
              dt + dt_tracking_to_update);
+    return {{}, TrackState::State::LOST};
+  }
+  if (auto nis_fail_opt = nisFailured();
+      nis_fail_opt.has_value() && nis_fail_opt.value()) {
+    LOG_INFO(logger_, "[Target {}]: Nis failure!.",
+             rfl::enum_to_string(target_state_.type));
+    this->nis_failure_deque_.clear();
     return {{}, TrackState::State::LOST};
   }
   auto obs_armors_odom = armors;

@@ -7,6 +7,7 @@
 
 #include "quill/Logger.h"
 #include <Eigen/Core>
+#include <deque>
 #include <gtsam/base/types.h>
 #include <gtsam/nonlinear/ISAM2.h>
 #include <gtsam/nonlinear/NonlinearFactorGraph.h>
@@ -16,6 +17,7 @@
 #include <chrono>
 #include <cstdint>
 #include <mutex>
+#include <optional>
 #include <vector>
 
 namespace auto_aim {
@@ -39,7 +41,7 @@ public:
   static std::vector<ArmorMatchResult>
   matchArmor(const std::vector<std::pair<ArmorPositionYaw, Eigen::Matrix4d>>
                  &armors_ypdacovs,
-             const ArmorPositionYaw &obs, double match_thres);
+             const ArmorPositionYaw &obs);
 };
 
 class RobotTarget : public Target {
@@ -93,6 +95,8 @@ private:
                                    const ArmorPositionRollPitchYawPoints &armor,
                                    std::uint64_t k) const;
   void resetCovariances();
+  void updateNisFailureDeque(double distance) const;
+  std::optional<bool> nisFailured() const;
 
   quill::Logger *logger_;
   RobotConfig config_;
@@ -102,6 +106,8 @@ private:
   RobotTargetState target_state_;
   TrackState track_state_;
 
+  // 非状态（仅在每一帧内完成更新和使用）数据在更新过程中可变
+  // 有点屎味了
   mutable std::mutex state_mtx_;
   mutable gtsam::ISAM2 isam2_;
 
@@ -112,6 +118,8 @@ private:
   mutable Eigen::Matrix3d V_cov_;
   mutable double R_cov_;
   mutable double W_cov_;
+
+  mutable std::deque<bool> nis_failure_deque_;
 };
 
 class OutpostTarget : public Target {
