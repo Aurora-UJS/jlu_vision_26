@@ -28,18 +28,20 @@ struct YawPitchDistanceConfig {
 };
 
 struct ArmorMatchConfig {
-  [[deprecated]] double max_match_distance_m;
-  [[deprecated]] double max_match_yaw_diff_degree;
   double max_match_mahalanobis_distance;
   // NOTE: 装甲板匹配是在重投影优化之前，即还得接着用PNP的ypd噪声算马氏距离
   YawPitchDistanceConfig ypd_conf;
 };
 
-struct RobotConfig {
-  ArmorMatchConfig armor_match_conf;
+struct NisCheckConfig {
   int nis_failure_window_size;
   double nis_failure_thres;
   double reset_failure_percentage_thres;
+};
+
+struct RobotConfig {
+  ArmorMatchConfig armor_match_conf;
+  NisCheckConfig nis_conf;
   int first_update_batch_size; // 冷启动时第一次优化时最少的k
   double lost_threshold_sec;   // 超时重置因子图的阈值
   // 先验噪声
@@ -62,8 +64,8 @@ struct RobotConfig {
 };
 
 struct OutpostConfig {
-  double max_match_distance_m;
-  double max_match_yaw_diff_degree;
+  ArmorMatchConfig armor_match_conf;
+  NisCheckConfig nis_conf;
   int first_update_batch_size; // 冷启动时第一次优化时最少的k
   double lost_threshold_sec;   // 超时重置因子图的阈值
   // 先验噪声

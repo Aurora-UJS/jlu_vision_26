@@ -29,9 +29,10 @@ robot_conf:
       distance_noise_log_scale: 1.0
       basic_armor_yaw_noise: 9e-2
       armor_yaw_log_divisor: 200.0
-  nis_failure_window_size: 100
-  nis_failure_thres: 9.5
-  reset_failure_percentage_thres: 40
+  nis_conf:
+    nis_failure_window_size: 100
+    nis_failure_thres: 9.5
+    reset_failure_percentage_thres: 40
   lost_threshold_sec: 0.3
   yaw_prior_noise: 9.0
   vyaw_prior_noise: 9.0
@@ -70,8 +71,20 @@ robot_conf:
 
 outpost_conf:
   first_update_batch_size: 1
-  max_match_distance_m: 1.5
-  max_match_yaw_diff_degree: 45.0
+  armor_match_conf:
+    max_match_yaw_diff_degree: 45.0
+    max_match_distance_m: 1.5
+    max_match_mahalanobis_distance: 15.0
+    ypd_conf:
+      yaw_pitch_noise: 4e-3
+      basic_distance_noise: 1.0
+      distance_noise_log_scale: 1.0
+      basic_armor_yaw_noise: 9e-2
+      armor_yaw_log_divisor: 200.0
+  nis_conf:
+    nis_failure_window_size: 100
+    nis_failure_thres: 9.5
+    reset_failure_percentage_thres: 40
   lost_threshold_sec: 0.8
   yaw_prior_noise: 9.0
   vyaw_prior_noise: 9.0
@@ -115,8 +128,6 @@ planner_conf:
   iterative_yaw0: true
   rk45_traj: false
   iterative_traj: false
-  no_predict: false
-  consider_gimbal_response: true
   shoot_offset: 0
   yaw_offset: 0.0
   pitch_offset: 0.0
@@ -142,7 +153,6 @@ planner_conf:
       gimbal_pitch_max_degree: 30.0
       gimbal_pitch_min_degree: -10.0
     max_aim_iterate_count: 100
-    max_aim_switch_armor_count: 10
     aim_ok_error_m: 0.01
     armor_switch_facing_degree_diff_thres: 5.0
     iterative_max_facing_degree: 80.0
@@ -152,4 +162,3 @@ planner_conf:
     norm_dispersion_pitch_degree: 0.5
     min_fire_thres_yaw_degree: 0.1
     min_fire_thres_pitch_degree: 0.1
-

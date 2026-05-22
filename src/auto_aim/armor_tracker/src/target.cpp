@@ -141,7 +141,7 @@ auto_aim::RobotTarget::matchArmors(
   center_cov(3, 3) = cov_R_pred;
   auto armors = RobotTarget::getArmorsFromTargetState(state);
   // HACK: 因为S中的R对每个观测都不同，即需要区分不同观测的四个协方差
-  // 先那个vec装着了，后续重构下接口最好
+  // 先拿个vec装着了，后续重构下接口最好
   std::vector<std::vector<std::pair<ArmorPositionYaw, Eigen::Matrix4d>>>
       armors_covs_vec;
   for (const auto &obs : obs_armors_odom) {
@@ -201,17 +201,33 @@ auto_aim::RobotTarget::matchArmors(
 }
 
 void auto_aim::RobotTarget::updateNisFailureDeque(double distance) const {
-  this->nis_failure_deque_.push_back(distance > config_.nis_failure_thres);
-  if (nis_failure_deque_.size() > config_.nis_failure_window_size)
+  this->nis_failure_deque_.push_back(distance >
+                                     config_.nis_conf.nis_failure_thres);
+  if (nis_failure_deque_.size() > config_.nis_conf.nis_failure_window_size)
     nis_failure_deque_.pop_front();
 }
 
 std::optional<bool> auto_aim::RobotTarget::nisFailured() const {
-  if (nis_failure_deque_.size() < config_.nis_failure_window_size)
+  if (nis_failure_deque_.size() < config_.nis_conf.nis_failure_window_size)
     return std::nullopt;
   return (static_cast<double>(std::ranges::count(nis_failure_deque_, true)) /
-          config_.nis_failure_window_size) >
-         (config_.reset_failure_percentage_thres / 100.0);
+          config_.nis_conf.nis_failure_window_size) >
+         (config_.nis_conf.reset_failure_percentage_thres / 100.0);
+}
+
+void auto_aim::OutpostTarget::updateNisFailureDeque(double distance) const {
+  this->nis_failure_deque_.push_back(distance >
+                                     config_.nis_conf.nis_failure_thres);
+  if (nis_failure_deque_.size() > config_.nis_conf.nis_failure_window_size)
+    nis_failure_deque_.pop_front();
+}
+
+std::optional<bool> auto_aim::OutpostTarget::nisFailured() const {
+  if (nis_failure_deque_.size() < config_.nis_conf.nis_failure_window_size)
+    return std::nullopt;
+  return (static_cast<double>(std::ranges::count(nis_failure_deque_, true)) /
+          config_.nis_conf.nis_failure_window_size) >
+         (config_.nis_conf.reset_failure_percentage_thres / 100.0);
 }
 
 auto_aim::RobotTargetState auto_aim::RobotTarget::getTargetStateFromArmor(
@@ -294,6 +310,7 @@ auto_aim::RobotTarget::track(const std::vector<types::Armor> &armors,
     track_state_.k = 0;
     isam2_ = gtsam::ISAM2{};
     this->resetCovariances();
+    this->nis_failure_deque_.clear();
   }
   return track_state_.state;
 }
@@ -500,7 +517,6 @@ auto_aim::RobotTarget::update(
       nis_fail_opt.has_value() && nis_fail_opt.value()) {
     LOG_INFO(logger_, "[Target {}]: Nis failure!.",
              rfl::enum_to_string(target_state_.type));
-    this->nis_failure_deque_.clear();
     return {{}, TrackState::State::LOST};
   }
   auto obs_armors_odom = armors;
@@ -610,6 +626,25 @@ void auto_aim::RobotTarget::resetCovariances() {
   W_cov_ = config_.vyaw_prior_noise * config_.vyaw_prior_noise;
 }
 
+void auto_aim::OutpostTarget::resetCovariances() {
+  X_cov_ = Eigen::Matrix3d::Zero();
+  X_cov_(0, 0) =
+      config_.translation_prior_noise.x * config_.translation_prior_noise.x;
+  X_cov_(1, 1) =
+      config_.translation_prior_noise.y * config_.translation_prior_noise.y;
+  X_cov_(2, 2) =
+      config_.translation_prior_noise.z * config_.translation_prior_noise.z;
+  V_cov_ = Eigen::Matrix3d::Zero();
+  V_cov_(0, 0) =
+      config_.velocity_prior_noise.x * config_.velocity_prior_noise.x;
+  V_cov_(1, 1) =
+      config_.velocity_prior_noise.y * config_.velocity_prior_noise.y;
+  V_cov_(2, 2) =
+      config_.velocity_prior_noise.z * config_.velocity_prior_noise.z;
+  R_cov_ = config_.yaw_prior_noise * config_.yaw_prior_noise;
+  W_cov_ = config_.vyaw_prior_noise * config_.vyaw_prior_noise;
+}
+
 auto_aim::OutpostTarget::OutpostTarget(quill::Logger *logger,
                                        const OutpostConfig &config,
                                        const cv::Mat &camera_matrix,
@@ -624,6 +659,7 @@ auto_aim::OutpostTarget::OutpostTarget(quill::Logger *logger,
   track_state_.stamp_last_update = std::chrono::system_clock::from_time_t(0);
   track_state_.stamp_last_tracking = std::chrono::system_clock::from_time_t(0);
   track_state_.k = 0;
+  this->resetCovariances();
 }
 
 auto_aim::TrackState::State auto_aim::OutpostTarget::track(
@@ -672,6 +708,8 @@ auto_aim::TrackState::State auto_aim::OutpostTarget::track(
     std::scoped_lock lk{state_mtx_};
     track_state_.state = TrackState::State::LOST;
     track_state_.k = 0;
+    this->resetCovariances();
+    this->nis_failure_deque_.clear();
     isam2_ = gtsam::ISAM2{};
   }
   return track_state_.state;
@@ -732,20 +770,72 @@ auto_aim::OutpostTarget::getArmorsFromTargetState(
 std::vector<
     std::pair<auto_aim::ArmorPositionRollPitchYawPoints, auto_aim::ArmorIndex>>
 auto_aim::OutpostTarget::matchArmors(
-    const OutpostTargetState &state,
+    const OutpostTargetState &state, double dt,
     const std::vector<ArmorPositionRollPitchYawPoints> &obs_armors_camera,
     const std::vector<ArmorPositionRollPitchYawPoints> &obs_armors_odom) const {
+  Eigen::Matrix3d cov_X_pred = X_cov_ + V_cov_ * (dt * dt);
+  cov_X_pred.diagonal() += Eigen::Vector3d{
+      config_.translation_factor_noise.x * dt * dt,
+      config_.translation_factor_noise.y * dt * dt,
+      config_.translation_factor_noise.z * dt * dt,
+  };
+  double cov_R_pred = R_cov_ + W_cov_ * dt * dt;
+  cov_R_pred += config_.yaw_factor_noise * dt * dt;
+  Eigen::Matrix4d center_cov = Eigen::Matrix4d::Zero();
+  center_cov.topLeftCorner<3, 3>() = cov_X_pred;
+  center_cov(3, 3) = cov_R_pred;
   auto armors = OutpostTarget::getArmorsFromTargetState(state);
+  // HACK: 因为S中的R对每个观测都不同，即需要区分不同观测的四个协方差
+  // 先拿个vec装着了，后续重构下接口最好
+  std::vector<std::vector<std::pair<ArmorPositionYaw, Eigen::Matrix4d>>>
+      armors_covs_vec;
+  for (const auto &obs : obs_armors_odom) {
+    std::vector<std::pair<ArmorPositionYaw, Eigen::Matrix4d>> armors_covs;
+    for (const auto &armor : armors) {
+      Eigen::Vector3d offset = armor.position - state.center_position;
+      Eigen::Matrix4d J = Eigen::Matrix4d::Identity();
+      J(0, 3) = -offset.y();
+      J(1, 3) = offset.x();
+      Eigen::Matrix4d P = J * center_cov * J.transpose();
+      // 将xyz协方差转换成ypd协方差
+      Eigen::Matrix3d P_xyz = P.topLeftCorner<3, 3>();
+      Eigen::Matrix3d J_sph =
+          tools::cartesian2SphericalJacobian(armor.position);
+      P.topLeftCorner<3, 3>() = J_sph * P_xyz * J_sph.transpose(); // P_ypd
+      auto obs_center_yaw = std::atan2(obs.position.y(), obs.position.x());
+      auto obs_incline_angle =
+          tools::limitRadian(obs.yaw.theta() - obs_center_yaw);
+      // XXX: 没有人类了
+      Eigen::VectorXd R_dig{
+          {config_.armor_match_conf.ypd_conf.yaw_pitch_noise,
+           config_.armor_match_conf.ypd_conf.yaw_pitch_noise,
+           log(config_.armor_match_conf.ypd_conf.distance_noise_log_scale *
+                   std::abs(obs_incline_angle) +
+               1) +
+               config_.armor_match_conf.ypd_conf.basic_distance_noise,
+           log(std::abs(obs.position.norm()) + 1) /
+                   config_.armor_match_conf.ypd_conf.armor_yaw_log_divisor +
+               config_.armor_match_conf.ypd_conf.basic_armor_yaw_noise},
+      };
+      Eigen::Matrix4d R = R_dig.asDiagonal();
+      Eigen::Matrix4d S = P + R;
+      armors_covs.emplace_back(armor, S);
+    }
+    armors_covs_vec.emplace_back(armors_covs);
+  }
   std::vector<std::pair<ArmorPositionRollPitchYawPoints, ArmorIndex>>
       matched_armors;
   std::array<bool, 4> used_index{false, false, false, false};
   for (std::size_t i = 0;
        i < obs_armors_camera.size() && i < obs_armors_odom.size(); ++i) {
     const auto &obs = obs_armors_odom.at(i);
-    auto result = Target::matchArmor(
-        armors, obs, config_.max_match_distance_m,
-        tools::angle2Radian(config_.max_match_yaw_diff_degree));
-    if (!result.empty() &&
+    auto result = Target::matchArmor(armors_covs_vec.at(i), obs);
+    if (result.empty())
+      continue;
+    // NOTE: 在此处从马氏距离更新NIS失败队列
+    this->updateNisFailureDeque(result.front().distance);
+    if (result.front().distance <
+            config_.armor_match_conf.max_match_mahalanobis_distance &&
         !used_index.at(static_cast<int>(result.front().index))) {
       matched_armors.emplace_back(obs_armors_camera.at(i),
                                   result.front().index);
@@ -935,6 +1025,12 @@ auto_aim::OutpostTarget::update(
              dt + dt_tracking_to_update);
     return {{}, TrackState::State::LOST};
   }
+  if (auto nis_fail_opt = nisFailured();
+      nis_fail_opt.has_value() && nis_fail_opt.value()) {
+    LOG_INFO(logger_, "[Target {}]: Nis failure!.",
+             rfl::enum_to_string(target_state_.type));
+    return {{}, TrackState::State::LOST};
+  }
   auto obs_armors_odom = armors;
   for (auto &armor : obs_armors_odom) {
     Eigen::Isometry3d armor_pose_camera{Eigen::Isometry3d::Identity()};
@@ -962,7 +1058,7 @@ auto_aim::OutpostTarget::update(
     target_state = getTargetStateFromArmor(obs_armors_odom.front());
   }
 
-  auto matched_armors = matchArmors(target_state, armors, obs_armors_odom);
+  auto matched_armors = matchArmors(target_state, dt, armors, obs_armors_odom);
   if (matched_armors.size() < obs_armors_odom.size()) {
     LOG_DEBUG(logger_, "[Target {}]: Miss match {} armors! k = {}.",
               rfl::enum_to_string(target_state.type),
@@ -1008,6 +1104,12 @@ auto_aim::OutpostTarget::update(
     target_state.dz_0 = isam2_.calculateEstimate<double>(Z(0));
     target_state.dz_1 = isam2_.calculateEstimate<double>(Z(1));
     target_state.dz_2 = isam2_.calculateEstimate<double>(Z(2));
+    // NOTE: isam2计算联合协方差的jointMarginalCovariance方法还在feature分支上
+    // 先用协方差凑合一下吧，等一手gtsam更新
+    this->X_cov_ = isam2_.marginalCovariance(X(track_state_.k));
+    this->V_cov_ = isam2_.marginalCovariance(V(track_state_.k));
+    this->R_cov_ = isam2_.marginalCovariance(R(track_state_.k))(0, 0);
+    this->W_cov_ = isam2_.marginalCovariance(W(track_state_.k))(0, 0);
     return {target_state, matched_armors.empty() ? TrackState::State::TEMPLOST
                                                  : TrackState::State::TRACKING};
   } catch (const std::exception &e) {

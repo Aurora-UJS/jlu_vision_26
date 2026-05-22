@@ -150,7 +150,7 @@ private:
 
   std::vector<std::pair<ArmorPositionRollPitchYawPoints, ArmorIndex>>
   matchArmors(
-      const OutpostTargetState &state,
+      const OutpostTargetState &state, double dt,
       const std::vector<ArmorPositionRollPitchYawPoints> &obs_armors_camera,
       const std::vector<ArmorPositionRollPitchYawPoints> &obs_armors_odom)
       const;
@@ -172,6 +172,9 @@ private:
                                    gtsam::Key armor_pose_key,
                                    const ArmorPositionRollPitchYawPoints &armor,
                                    std::uint64_t k) const;
+  void resetCovariances();
+  void updateNisFailureDeque(double distance) const;
+  std::optional<bool> nisFailured() const;
 
   quill::Logger *logger_;
   OutpostConfig config_;
@@ -186,6 +189,13 @@ private:
 
   mutable gtsam::Values initial_values_;
   mutable gtsam::NonlinearFactorGraph initial_graph_;
+
+  mutable Eigen::Matrix3d X_cov_;
+  mutable Eigen::Matrix3d V_cov_;
+  mutable double R_cov_;
+  mutable double W_cov_;
+
+  mutable std::deque<bool> nis_failure_deque_;
 };
 
 } // namespace auto_aim
