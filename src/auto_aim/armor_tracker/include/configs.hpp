@@ -44,6 +44,7 @@ struct RobotConfig {
   NisCheckConfig nis_conf;
   int first_update_batch_size; // 冷启动时第一次优化时最少的k
   double lost_threshold_sec;   // 超时重置因子图的阈值
+  double huge_vyaw_reset_thres;
   // 先验噪声
   double yaw_prior_noise;
   double vyaw_prior_noise;
@@ -68,6 +69,8 @@ struct OutpostConfig {
   NisCheckConfig nis_conf;
   int first_update_batch_size; // 冷启动时第一次优化时最少的k
   double lost_threshold_sec;   // 超时重置因子图的阈值
+  double huge_vyaw_reset_thres;
+  // 先验噪声
   // 先验噪声
   double yaw_prior_noise;
   double vyaw_prior_noise;

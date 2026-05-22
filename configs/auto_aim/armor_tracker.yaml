@@ -22,7 +22,7 @@ robot_conf:
   armor_match_conf:
     max_match_yaw_diff_degree: 40.0
     max_match_distance_m: 1.0
-    max_match_mahalanobis_distance: 15.0
+    max_match_mahalanobis_distance: 50.0
     ypd_conf:
       yaw_pitch_noise: 4e-3
       basic_distance_noise: 1.0
@@ -32,8 +32,9 @@ robot_conf:
   nis_conf:
     nis_failure_window_size: 100
     nis_failure_thres: 9.5
-    reset_failure_percentage_thres: 40
+    reset_failure_percentage_thres: 15
   lost_threshold_sec: 0.3
+  huge_vyaw_reset_thres: 50
   yaw_prior_noise: 9.0
   vyaw_prior_noise: 9.0
   translation_prior_noise:
@@ -86,6 +87,7 @@ outpost_conf:
     nis_failure_thres: 9.5
     reset_failure_percentage_thres: 40
   lost_threshold_sec: 0.8
+  huge_vyaw_reset_thres: 50
   yaw_prior_noise: 9.0
   vyaw_prior_noise: 9.0
   translation_prior_noise:
@@ -155,7 +157,7 @@ planner_conf:
     max_aim_iterate_count: 100
     aim_ok_error_m: 0.01
     armor_switch_facing_degree_diff_thres: 5.0
-    iterative_max_facing_degree: 80.0
+    iterative_max_facing_degree: 70.0
     flytime0_distance_offset: -0.3
   fire_ctrl_conf:
     norm_dispersion_yaw_degree: 0.5

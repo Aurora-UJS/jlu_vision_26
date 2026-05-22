@@ -11,6 +11,7 @@
 
 #include "quill/LogMacros.h"
 #include "rfl/enums.hpp"
+#include <cstdlib>
 #include <gtsam/base/Vector.h>
 #include <gtsam/base/types.h>
 #include <gtsam/geometry/Point3.h>
@@ -180,22 +181,31 @@ auto_aim::RobotTarget::matchArmors(
   }
   std::vector<std::pair<ArmorPositionRollPitchYawPoints, ArmorIndex>>
       matched_armors;
-  std::array<bool, 4> used_index{false, false, false, false};
+  std::array<std::vector<std::pair<double, ArmorPositionRollPitchYawPoints>>, 4>
+      index_vector_array;
   for (std::size_t i = 0;
        i < obs_armors_camera.size() && i < obs_armors_odom.size(); ++i) {
     const auto &obs = obs_armors_odom.at(i);
     auto result = Target::matchArmor(armors_covs_vec.at(i), obs);
     if (result.empty())
       continue;
-    // NOTE: 在此处从马氏距离更新NIS失败队列
+    // NOTE: 在此处从马氏距离更新NIS失败队列，相信只要是观测就都是有效的
     this->updateNisFailureDeque(result.front().distance);
     if (result.front().distance <
-            config_.armor_match_conf.max_match_mahalanobis_distance &&
-        !used_index.at(static_cast<int>(result.front().index))) {
-      matched_armors.emplace_back(obs_armors_camera.at(i),
-                                  result.front().index);
-      used_index.at(static_cast<int>(result.front().index)) = true;
+        config_.armor_match_conf.max_match_mahalanobis_distance) {
+      index_vector_array.at(static_cast<int>(result.front().index))
+          .emplace_back(result.front().distance, obs_armors_camera.at(i));
     }
+  }
+  int idx = 0;
+  for (auto &cost_armor_vec : index_vector_array) {
+    std::ranges::sort(
+        cost_armor_vec, std::less<>{},
+        &std::pair<double, ArmorPositionRollPitchYawPoints>::first);
+    if (!cost_armor_vec.empty())
+      matched_armors.emplace_back(std::pair{cost_armor_vec.front().second,
+                                            static_cast<ArmorIndex>(idx)});
+    idx++;
   }
   return matched_armors;
 }
@@ -515,7 +525,7 @@ auto_aim::RobotTarget::update(
   }
   if (auto nis_fail_opt = nisFailured();
       nis_fail_opt.has_value() && nis_fail_opt.value()) {
-    LOG_INFO(logger_, "[Target {}]: Nis failure!.",
+    LOG_INFO(logger_, "[Target {}]: Nis failure!",
              rfl::enum_to_string(target_state_.type));
     return {{}, TrackState::State::LOST};
   }
@@ -538,6 +548,12 @@ auto_aim::RobotTarget::update(
       return {{}, TrackState::State::LOST};
     else
       target_state = getTargetStateFromArmor(obs_armors_odom.front());
+  }
+
+  if (std::abs(target_state.center_vyaw) > config_.huge_vyaw_reset_thres) {
+    LOG_INFO(logger_, "[Target {}]: Abnormal vyaw {}!",
+             rfl::enum_to_string(target_state.type), target_state.center_vyaw);
+    return {{}, TrackState::State::LOST};
   }
 
   // XXX: 这里似乎没有考虑到冷启动过程中的临时丢失
@@ -825,7 +841,8 @@ auto_aim::OutpostTarget::matchArmors(
   }
   std::vector<std::pair<ArmorPositionRollPitchYawPoints, ArmorIndex>>
       matched_armors;
-  std::array<bool, 4> used_index{false, false, false, false};
+  std::array<std::vector<std::pair<double, ArmorPositionRollPitchYawPoints>>, 3>
+      index_vector_array;
   for (std::size_t i = 0;
        i < obs_armors_camera.size() && i < obs_armors_odom.size(); ++i) {
     const auto &obs = obs_armors_odom.at(i);
@@ -835,12 +852,20 @@ auto_aim::OutpostTarget::matchArmors(
     // NOTE: 在此处从马氏距离更新NIS失败队列
     this->updateNisFailureDeque(result.front().distance);
     if (result.front().distance <
-            config_.armor_match_conf.max_match_mahalanobis_distance &&
-        !used_index.at(static_cast<int>(result.front().index))) {
-      matched_armors.emplace_back(obs_armors_camera.at(i),
-                                  result.front().index);
-      used_index.at(static_cast<int>(result.front().index)) = true;
+        config_.armor_match_conf.max_match_mahalanobis_distance) {
+      index_vector_array.at(static_cast<int>(result.front().index))
+          .emplace_back(result.front().distance, obs_armors_camera.at(i));
     }
+  }
+  int idx = 0;
+  for (auto &cost_armor_vec : index_vector_array) {
+    std::ranges::sort(
+        cost_armor_vec, std::less<>{},
+        &std::pair<double, ArmorPositionRollPitchYawPoints>::first);
+    if (!cost_armor_vec.empty())
+      matched_armors.emplace_back(std::pair{cost_armor_vec.front().second,
+                                            static_cast<ArmorIndex>(idx)});
+    idx++;
   }
   return matched_armors;
 }
@@ -1051,7 +1076,11 @@ auto_aim::OutpostTarget::update(
     else
       target_state = getTargetStateFromArmor(obs_armors_odom.front());
   }
-
+  if (std::abs(target_state.center_vyaw) > config_.huge_vyaw_reset_thres) {
+    LOG_INFO(logger_, "[Target {}]: Abnormal vyaw {}!",
+             rfl::enum_to_string(target_state.type), target_state.center_vyaw);
+    return {{}, TrackState::State::LOST};
+  }
   // XXX: 这里似乎没有考虑到冷启动过程中的临时丢失
   if (track_state_.k < config_.first_update_batch_size &&
       !obs_armors_odom.empty()) {
