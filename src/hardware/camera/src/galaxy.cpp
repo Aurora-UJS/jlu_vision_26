@@ -103,6 +103,9 @@ bool hardware::Galaxy::readImage(unsigned char *buffer, std::size_t buffer_size,
         if (reverse_xy_) {
           GXSetBool(camera_handle_, GX_BOOL_REVERSE_X, 1);
           GXSetBool(camera_handle_, GX_BOOL_REVERSE_Y, 1);
+        } else {
+          GXSetBool(camera_handle_, GX_BOOL_REVERSE_X, 0);
+          GXSetBool(camera_handle_, GX_BOOL_REVERSE_Y, 0);
         }
         fail_conut_ = 0;
         break;

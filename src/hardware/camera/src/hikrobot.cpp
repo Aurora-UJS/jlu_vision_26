@@ -81,6 +81,9 @@ hardware::HikRobot::HikRobot(quill::Logger *logger,
   if (reverse_xy) {
     setBoolValue("ReverseX", true);
     setBoolValue("ReverseY", true);
+  } else {
+    setBoolValue("ReverseX", false);
+    setBoolValue("ReverseY", false);
   }
   ret = MV_CC_SetFrameRate(handle_, camera_params_.frame_rate);
   if (ret != MV_OK) {
