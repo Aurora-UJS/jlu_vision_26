@@ -5,6 +5,7 @@
 #include "types.hpp"
 #include "types/BuffBladeType.hpp"
 #include "types/IceoryxServiceDescription.hpp"
+#include "center_corrector.hpp"
 
 #include "opencv2/core/types.hpp"
 #include "opencv2/highgui.hpp"
@@ -86,6 +87,10 @@ void auto_buff::DetectorNode::imageCallback(
   std::vector<RuneObject> runes;
   try {
     runes = st_detector_->detect(image, mode);
+    std::erase_if(runes, [enemy_color = enemy_color_listener_.getEnemyColor()](const RuneObject &rune) {
+      return rune.color == enemy_color;
+    });
+    CenterCorrector::correctRunes(image, runes, mode);
   } catch (std::exception &e) {
     LOG_ERROR(ConfigManager::instance()->logger(), "Detector Error:{}",
               e.what());

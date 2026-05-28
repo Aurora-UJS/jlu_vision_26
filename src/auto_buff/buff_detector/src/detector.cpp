@@ -1,8 +1,7 @@
 #include "detector.hpp"
 #include "configs.hpp"
-#include "center_corrector.hpp"
 
-#include "opencv2/core/types.hpp"
+
 #include "quill/LogMacros.h"
 #include <opencv2/core/mat.hpp>
 
@@ -18,7 +17,6 @@ auto_buff::STDetectorDL::detect(const cv::Mat &image, Mode mode) {
   request.infer();
   auto output_tensor = request.get_output_tensor();
   auto runes = yolo_->postProcess(output_tensor);
-  cv::Point2f center;
-  CenterCorrector::correctRunes(image, runes, mode);
+  // cv::Point2f center;
   return runes;
 }

@@ -9,6 +9,7 @@
 #include "quill/LogMacros.h"
 #include "types/BuffBladeType.hpp"
 
+#include <memory>
 #include <opencv2/imgproc.hpp>
 #include <vector>
 
@@ -19,6 +20,7 @@ void auto_buff::CenterCorrector::correctRunes(const cv::Mat &image,
                                               std::vector<RuneObject> &runes, Mode mode) {
   if (runes.size() == 0)
     return;
+  
   if (mode == Mode::BigBuff) {
     runes.erase(std::remove_if(runes.begin(), runes.end(),
                              [](const RuneObject &obj) {

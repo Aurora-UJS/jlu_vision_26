@@ -2,6 +2,7 @@
 #include "quill/Logger.h"
 #include "single.hpp"
 #include "confs/IceoryxServiceDescription.hpp"
+#include "types/EnemyColor.hpp"
 // #include "basic/logger.hpp"
 
 #include "confs/CameraParams.hpp"
