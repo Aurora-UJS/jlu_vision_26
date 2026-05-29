@@ -93,10 +93,17 @@ bool hardware::Camera::publishImage() {
         // NOTE: 这里改成用硬件时间戳，不知道会不会更精准
         // 另外硬件时间戳是systemclock还是steady_clock还不太确定
         sample.getUserHeader().stamp_ns = tools::chronoPointToNanoSec(stamp);
-        if (success)
+        static int fail_count{0};
+        if (success) {
+          fail_count = 0;
           sample.publish();
-        else
+        } else {
           LOG_WARNING(logger_, "something wrong on getting image!");
+          if (fail_count++ > configs_.max_exit_fail_count) {
+            LOG_ERROR(logger_, "Too many failures! exit.");
+            std::exit(-1);
+          } 
+        }
       })
       .or_else([&](auto) {
         success = false;

@@ -39,7 +39,7 @@ private:
   static void onCameraParamRecievedCallback(
       iox::popo::Subscriber<msgs::CameraParams, msgs::Header> *subscriber,
       Camera *self);
-
+  
   quill::Logger *logger_;
   CameraConfigs configs_;
   std::unique_ptr<CameraBase> camera_;

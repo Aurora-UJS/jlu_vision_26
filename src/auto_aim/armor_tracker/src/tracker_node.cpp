@@ -14,6 +14,7 @@
 #include "msgs/Armor.hpp"
 #include "msgs/Header.hpp"
 #include "msgs/Image.hpp"
+#include "opencv2/imgproc.hpp"
 #include "planner.hpp"
 #include "target.hpp"
 #include "types.hpp"
@@ -252,9 +253,12 @@ auto_aim::TrackerNode::TrackerNode(quill::Logger *logger,
                                             tools::getTimeNowStr()};
                 if (frame_count == 0)
                   std::filesystem::create_directory(save_dir);
-                cv::imwrite(save_dir + "/" + std::to_string(frame_count++) +
-                                ".jpg",
-                            copy);
+                if (frame_count++ %15 == 0) {
+                  cv::resize(copy, copy,cv::Size{}, 0.5, 0.5);
+                  cv::imwrite(save_dir + "/" + std::to_string(frame_count++) +
+                  ".jpg",
+                  copy);
+                }
               }
               cv::imshow("tracker", copy);
               cv::waitKey(1);
@@ -323,7 +327,9 @@ auto_aim::TrackerNode::selectAimingTarget(bool reselect) const {
       selected_state{std::nullopt};
   for (const auto &[target_state, track_state] : targetable_targets)
     if (auto distance_opt = getPixelDistanceToImageCenter(
-            target_state.center_position, track_state.stamp_last_update);
+            target_state.type == types::ArmorType::Outpost
+                                     ? Eigen::Vector3d{target_state.center_position.x(), target_state.center_position.y(), target_state.armors().front().position.z()} 
+                                      : target_state.center_position, track_state.stamp_last_update);
         distance_opt.has_value() && distance_opt.value() < min_px_distance) {
       min_px_distance = distance_opt.value();
       selected_state = {target_state, track_state.stamp_last_update};

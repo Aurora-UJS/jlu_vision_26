@@ -24,6 +24,7 @@ struct CameraConfigs {
   bool reverse_xy;
   int image_publish_interval_ms;
   int cam_info_publish_interval_ms;
+  int max_exit_fail_count;
   quill::LogLevel log_level;
   std::string video_path;
 };
