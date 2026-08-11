@@ -75,6 +75,19 @@ RUN git clone --depth 1 --branch "${GTSAM_VERSION}" \
     && ldconfig \
     && rm -rf /tmp/gtsam
 
+# OpenVINO, matching the host's 2024.6.0-17404 but built for jammy.  The host
+# copy is the noble build and links against glibc 2.38 symbols
+# (__isoc23_strtoul and friends) that do not exist here, so mounting it in
+# fails at link time.  Same release, right libc.
+ARG OPENVINO_BUILD=2024.6.0.17404.4c0f47d2335
+RUN wget -q "https://storage.openvinotoolkit.org/repositories/openvino/packages/2024.6/linux/l_openvino_toolkit_ubuntu22_${OPENVINO_BUILD}_x86_64.tgz" \
+      -O /tmp/openvino.tgz \
+    && mkdir -p /opt/intel/openvino_2024 \
+    && tar -xzf /tmp/openvino.tgz -C /opt/intel/openvino_2024 --strip-components=1 \
+    && rm /tmp/openvino.tgz \
+    && ldconfig \
+    && test -f /opt/intel/openvino_2024/runtime/lib/intel64/libopenvino.so
+
 # xmake refuses to run as root unless this is acknowledged, and it has to be in
 # the environment before the version check below rather than after it.
 ENV XMAKE_ROOT=y
