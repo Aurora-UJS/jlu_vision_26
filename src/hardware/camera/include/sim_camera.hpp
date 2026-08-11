@@ -50,6 +50,7 @@ private:
   uint64_t last_sequence_ = 0;
   std::vector<uint8_t> scratch_;
   bool geometry_warned_ = false;
+  bool stall_warned_ = false;
 };
 
 }  // namespace hardware

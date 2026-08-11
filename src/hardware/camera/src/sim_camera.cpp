@@ -109,12 +109,26 @@ bool hardware::SimCamera::readImage(
         sequence != last_sequence_)
       break;
     if (std::chrono::steady_clock::now() > deadline) {
-      LOG_WARNING(logger_, "No new simulator frame within {} ms",
-                  kFrameTimeout.count());
-      return false;
+      // Pausing the simulator to look at something is routine, and the frame
+      // in the segment is still perfectly valid -- so hand it over again
+      // rather than reporting a failure.  The node counts failures and exits
+      // after enough of them, which would tear the pipeline down every time
+      // the simulation is paused.
+      if (!stall_warned_) {
+        LOG_WARNING(logger_,
+                    "No new simulator frame for {} ms (paused?); repeating the "
+                    "last one",
+                    kFrameTimeout.count());
+        stall_warned_ = true;
+      }
+      if (!copyStableFrame(scratch_, sequence, width, height))
+        return false;
+      break;
     }
     std::this_thread::sleep_for(kPollInterval);
   }
+  if (sequence != last_sequence_)
+    stall_warned_ = false;
   last_sequence_ = sequence;
   stamp = std::chrono::system_clock::now();
 
