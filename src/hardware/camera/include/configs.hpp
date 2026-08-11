@@ -13,6 +13,8 @@ enum class CameraType {
   hik,
   galaxy,
   video,
+  // Frames rendered by the Webots simulator, read from shared memory.
+  sim,
 };
 
 struct CameraConfigs {
@@ -27,6 +29,8 @@ struct CameraConfigs {
   int max_exit_fail_count;
   quill::LogLevel log_level;
   std::string video_path;
+  // Only read when camera_type is sim.
+  std::string sim_shm_name;
 };
 
 } // namespace hardware

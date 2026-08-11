@@ -1,0 +1,32 @@
+log_level: Info
+# Frames come from the Webots simulator over shared memory instead of a
+# camera SDK.  Start the simulator first; if this node runs in a container,
+# give it the host IPC namespace (docker run --ipc=host) or the segment is
+# invisible.
+camera_type: sim
+sim_shm_name: /aurora_rm_vision
+camera_name: camera0
+camera_frame_id: camera
+image_publish_interval_ms: 0
+cam_info_publish_interval_ms: 1000
+max_exit_fail_count: 100
+reverse_xy: true
+video_path: assets/buff_test_1.avi
+camera_info:
+  # The simulator's camera is sized to this geometry and its fieldOfView is set
+  # to 2*atan(width / 2fx) with the fx below, so the two agree by construction.
+  # See webots/protos/RmRobot.proto in rm_vision_simulator.
+  view_width_px: 1440
+  view_height_px: 1080
+  # A rendered pinhole has its principal point exactly at the image centre,
+  # unlike the measured 713.9 / 519.5 of the real lens.
+  camera_matrix: [2411.932469, 0.0, 720.0, 0.0, 2411.932469, 540.0, 0.0, 0.0, 1.0]
+  # Zero on purpose: Webots renders an ideal pinhole with no lens distortion.
+  # This is a real difference from the physical camera, not an omission -- a
+  # detector tuned only against these frames has never seen distortion.
+  distortion_coefficients: [0.0, 0.0, 0.0, 0.0, 0.0]
+camera_params:
+  # Accepted and ignored by the sim backend; the render has fixed exposure.
+  exposure_time: 3000
+  gain: 15.0
+  frame_rate: 100

@@ -3,6 +3,7 @@
 #include "configs.hpp"
 #include "galaxy.hpp"
 #include "hikrobot.hpp"
+#include "sim_camera.hpp"
 #include "video_capture.hpp"
 
 #include "iceoryx_posh/popo/listener.hpp"
@@ -46,6 +47,13 @@ hardware::Camera::Camera(quill::Logger *logger, const CameraConfigs &configs)
     break;
   case CameraType::video:
     this->camera_ = std::make_unique<VideoCapture>(logger, configs_.video_path);
+    break;
+  case CameraType::sim:
+    this->camera_ = std::make_unique<SimCamera>(
+        logger,
+        configs_.sim_shm_name.empty() ? "/aurora_rm_vision"
+                                      : configs_.sim_shm_name,
+        configs_.camera_info.view_width_px, configs_.camera_info.view_height_px);
     break;
   default:
     LOG_CRITICAL(logger_, "Unknown camera type!");
