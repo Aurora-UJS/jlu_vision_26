@@ -85,6 +85,16 @@ auto_aim::DetectorNode::DetectorNode(quill::Logger *logger,
             if (should_continue)
               this->imageCallback(image, frame_id, stamp);
           });
+  // imshow below runs on pop_thread, and OpenCV's GTK backend will not pump
+  // events for a window created off the main thread -- the window silently
+  // never appears.  This starts highgui's own event thread so it does.
+  if (configs_.show_detect_result || configs_.show_optimize_result ||
+      configs_.show_pnp_result) {
+    cv::namedWindow("detector", cv::WINDOW_NORMAL);
+    cv::resizeWindow("detector", 1280, 960);
+    cv::startWindowThread();
+  }
+
   // 初始化pop线程
   if (configs_.use_muti_thread)
     this->pop_thread_ = std::jthread{[&]() {
