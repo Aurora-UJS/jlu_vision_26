@@ -41,7 +41,11 @@ int main(int argc, char **argv) {
   const std::string save_path =
       argc > 3 ? argv[3] : "/out/sim_viewer.png";
 
-  iox::runtime::PoshRuntime::initRuntime("sim_viewer");
+  // iceoryx runtime names must be unique, so a --save grab can run alongside
+  // an already-open viewer window.
+  iox::runtime::PoshRuntime::initRuntime(
+      save_only ? iox::RuntimeName_t{"sim_viewer_grab"}
+                : iox::RuntimeName_t{"sim_viewer"});
   iox::popo::Subscriber<msgs::Image1440x1080_8UC3, msgs::Header> image_sub(
       {"image_raw", {iox::TruncateToCapacity, camera.c_str()}, "data"});
   iox::popo::Subscriber<msgs::Armor, msgs::Header> armor_sub(
@@ -67,15 +71,22 @@ int main(int argc, char **argv) {
       fresh = true;
     })) {
     }
+    // Only what arrived since the last frame gets drawn.  Keeping a backlog
+    // and redrawing it every frame smears stale boxes across the image as soon
+    // as the robot or gimbal moves, which reads as the detector being wrong
+    // when it is not.
+    bool got_armour = false;
     while (armor_sub.take().and_then([&](auto &sample) {
       if (sample->heart_beat) {
         ++heartbeats;
         return;
       }
       ++armour_msgs;
+      if (!got_armour) {
+        armours.clear();
+        got_armour = true;
+      }
       armours.push_back(*sample);
-      if (armours.size() > 8)
-        armours.pop_front();
     })) {
     }
 
