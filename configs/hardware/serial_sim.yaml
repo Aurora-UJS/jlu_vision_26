@@ -1,0 +1,46 @@
+log_level: Info
+serial_frame_id: serial
+odom_frame_id: odom
+gimbal_fram_id: gimbal
+stamp_offset_sec: 0.0
+
+# Talk to the Webots simulator over shared memory instead of a UART.  The topic
+# names below are identical to serial.yaml, so auto_aim cannot tell which
+# backend is feeding it.
+use_simulator: true
+sim_shm_name: /aurora_rm_aim
+# A simulated robot has no referee downlink; these replace the fields a real
+# packet would carry.  0 = auto aim.  Enemy colour follows the simulator's
+# TargetRobot, which starts red.
+sim_task_mode: 0
+sim_enemy_color: 0
+
+iceoryx_conf:
+  aim_command_topic:
+    service: aim_command
+    instance: tracker
+    event: data
+  gimbal_info_topic:
+    service: gimbal_info
+    instance: serial
+    event: data
+  enemy_color_topic:
+    service: enemy_color
+    instance: serial
+    event: data
+  task_mode_topic:
+    service: task_mode
+    instance: serial
+    event: data
+  bullet_id_topic:
+    service: bullet_id
+    instance: serial
+    event: data
+
+# Unused with use_simulator, but the config struct still requires the block.
+serial_conf:
+  device_name: /dev/null
+  baudrate: 115200
+  stopbits: stopbits_one
+  flowcontrol: flowcontrol_none
+  parity: parity_none

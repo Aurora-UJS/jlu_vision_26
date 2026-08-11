@@ -33,6 +33,12 @@ struct SerialConfigs {
   double stamp_offset_sec;
   // bool publish_latency_ms;
   quill::LogLevel log_level;
+  // Only used by the simulator backend.  A simulated robot has no referee
+  // downlink, so these stand in for the fields a real packet would carry.
+  bool use_simulator;
+  std::string sim_shm_name;
+  int sim_task_mode;
+  int sim_enemy_color;
 };
 
 } // namespace hardware

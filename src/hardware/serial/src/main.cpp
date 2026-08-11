@@ -2,6 +2,7 @@
 #include "basic/logger.hpp"
 #include "configs.hpp"
 #include "serial.hpp"
+#include "sim_serial.hpp"
 
 #include <cxxopts.hpp>
 #include <iceoryx_posh/runtime/posh_runtime.hpp>
@@ -13,6 +14,7 @@
 #include <rfl/yaml/read.hpp>
 
 #include <fstream>
+#include <memory>
 #include <string>
 
 constexpr char APP_NAME[] = "serial";
@@ -48,7 +50,17 @@ int main(int argc, char *argv[]) {
 
   auto *logger = tools::initAndGetLogger(APP_NAME, configs.log_level, log_path);
   iox::runtime::PoshRuntime::initRuntime(APP_NAME);
-  hardware::Serial serial{logger, configs};
+  // The simulator backend publishes the same topics over shared memory instead
+  // of a UART, so everything downstream is unchanged.
+  std::unique_ptr<hardware::Serial> serial;
+  std::unique_ptr<hardware::SimSerial> sim_serial;
+  if (configs.use_simulator) {
+    sim_serial = std::make_unique<hardware::SimSerial>(
+        logger, configs,
+        configs.sim_shm_name.empty() ? "/aurora_rm_aim" : configs.sim_shm_name);
+  } else {
+    serial = std::make_unique<hardware::Serial>(logger, configs);
+  }
   iox::waitForTerminationRequest();
   return 0;
 }
