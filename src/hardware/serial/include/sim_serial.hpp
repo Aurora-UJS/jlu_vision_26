@@ -16,6 +16,8 @@
 #include "configs.hpp"
 #include "sim_aim_link.hpp"
 
+#include "basic/plotter.hpp"
+
 #include "msgs/AimCommand.hpp"
 #include "msgs/EnemyColor.hpp"
 #include "msgs/GimbalInfo.hpp"
@@ -60,6 +62,13 @@ private:
   iox::popo::Subscriber<msgs::AimCommand, msgs::Header> aim_cmd_sub_;
   iox::popo::Listener aim_cmd_listener_;
   tf::DynamicTransformPublisher tf_pub_;
+  // Streams the gimbal loop to PlotJuggler over UDP JSON on 9870.
+  tools::Plotter plotter_;
+  double target_yaw_ = 0.0;
+  double target_pitch_ = 0.0;
+  bool have_target_ = false;
+  bool control_ = false;
+  bool fire_ = false;
 };
 
 } // namespace hardware

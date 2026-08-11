@@ -5,10 +5,15 @@ set_languages("c++20")
 set_rundir("$(projectdir)")
 -- NOTE: 不设置的话程序就会在build里找assets、保存日志了
 
+-- RM_SIM_PREFIX lets iceoryx and gtsam live somewhere other than /usr/local,
+-- so they can be installed per-user without sudo.  Unset, the old paths apply.
+local dep_prefix = os.getenv("RM_SIM_PREFIX") or "/usr/local"
+
 rule("iceoryx_deps")
 on_load(function(target)
-	target:add("includedirs", "/usr/local/include/iceoryx/v")
-	target:add("linkdirs", "/usr/local/lib")
+	target:add("includedirs", path.join(dep_prefix, "include/iceoryx/v"))
+	target:add("linkdirs", path.join(dep_prefix, "lib"))
+	target:add("rpathdirs", path.join(dep_prefix, "lib"))
 	target:add("links", "iceoryx_posh", "iceoryx_hoofs", "iceoryx_platform")
 end)
 rule_end()
@@ -23,11 +28,11 @@ rule_end()
 
 rule("gtsam_deps")
 on_load(function(target)
-	target:add("includedirs", "/usr/local/include")
-	target:add("linkdirs", "/usr/local/lib")
+	target:add("includedirs", path.join(dep_prefix, "include"))
+	target:add("linkdirs", path.join(dep_prefix, "lib"))
 	target:add("links", "gtsam", "metis-gtsam", "cephes-gtsam")
-	target:add("rpathdirs", "/usr/local/lib")
-	target:add("runenvs", "LD_LIBRARY_PATH", "/usr/local/lib")
+	target:add("rpathdirs", path.join(dep_prefix, "lib"))
+	target:add("runenvs", "LD_LIBRARY_PATH", path.join(dep_prefix, "lib"))
 	target:add("packages", "eigen")
 	target:add("packages", "tbb")
 	target:add("packages", "boost")

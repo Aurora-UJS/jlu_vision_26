@@ -28,6 +28,7 @@
 #include <cstdio>
 #include <deque>
 #include <string>
+#include <algorithm>
 
 namespace {
 cv::Point toPoint(const msgs::Point2d &p) {
@@ -100,15 +101,25 @@ int main(int argc, char **argv) {
         const cv::Point lb = toPoint(armour.left_light.bottom);
         const cv::Point rt = toPoint(armour.right_light.top);
         const cv::Point rb = toPoint(armour.right_light.bottom);
-        cv::line(canvas, lt, lb, colour, 3);
-        cv::line(canvas, rt, rb, colour, 3);
-        const std::vector<cv::Point> quad{lt, rt, rb, lb};
-        cv::polylines(canvas, quad, true, cv::Scalar(0, 255, 0), 2);
+        // Same marks the detector draws itself (DetectorNode::drawArmor):
+        // each bar as a line with its endpoints ringed, and the armour as the
+        // two diagonals.  A closed quad through the four endpoints looks
+        // skewed whenever the bars differ in height or tilt, which reads as a
+        // bad detection when the detection is fine.
+        cv::circle(canvas, lt, 3, cv::Scalar(0, 255, 0), 1);
+        cv::circle(canvas, lb, 3, cv::Scalar(0, 255, 0), 1);
+        cv::circle(canvas, rt, 3, cv::Scalar(0, 255, 0), 1);
+        cv::circle(canvas, rb, 3, cv::Scalar(0, 255, 0), 1);
+        cv::line(canvas, lt, lb, colour, 2);
+        cv::line(canvas, rt, rb, colour, 2);
+        cv::line(canvas, lt, rb, cv::Scalar(0, 255, 0), 2);
+        cv::line(canvas, lb, rt, cv::Scalar(0, 255, 0), 2);
         char label[96];
         std::snprintf(label, sizeof(label), "type=%d colour=%d conf=%.2f d=%.2fm",
                       armour.armor_type, armour.armor_color, armour.confidence,
                       armour.position.z);
-        cv::putText(canvas, label, lt + cv::Point(0, -12),
+        cv::putText(canvas, label, cv::Point(std::min(lt.x, rt.x),
+                                            std::min(lt.y, rt.y) - 12),
                     cv::FONT_HERSHEY_SIMPLEX, 0.8, cv::Scalar(0, 255, 0), 2);
       }
       char hud[160];

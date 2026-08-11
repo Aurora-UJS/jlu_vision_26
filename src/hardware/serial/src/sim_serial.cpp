@@ -4,6 +4,8 @@
 #include "math/angle_tools.hpp"
 #include "types/IceoryxServiceDescription.hpp"
 
+#include <nlohmann/json.hpp>
+
 #include "iceoryx_hoofs/cxx/string.hpp"
 #include "iox/signal_watcher.hpp"
 #include "quill/LogMacros.h"
@@ -125,6 +127,30 @@ void hardware::SimSerial::stateThread() {
           sample.publish();
         });
 
+    // Everything the gimbal loop is doing, in one place: where it is, how fast
+    // it is moving, where the aimer asked it to go, and the error between.
+    // One datagram per simulator step, not one per field.  Sent separately,
+    // each value arrives as its own message and PlotJuggler timestamps them
+    // independently -- the commanded angle and the measured one then sit on
+    // slightly different time axes, which is exactly the comparison this is
+    // for.
+    nlohmann::json frame;
+    frame["sim_time"] = state.sim_time;
+    frame["gimbal/yaw"] = state.yaw;
+    frame["gimbal/pitch"] = state.pitch;
+    frame["gimbal/yaw_vel"] = state.yaw_velocity;
+    frame["gimbal/pitch_vel"] = state.pitch_velocity;
+    frame["gimbal/muzzle_speed"] = state.muzzle_speed;
+    if (have_target_) {
+      frame["aim/target_yaw"] = target_yaw_;
+      frame["aim/target_pitch"] = target_pitch_;
+      frame["aim/yaw_error"] = target_yaw_ - state.yaw;
+      frame["aim/pitch_error"] = target_pitch_ - state.pitch;
+      frame["aim/control"] = control_ ? 1.0 : 0.0;
+      frame["aim/fire"] = fire_ ? 1.0 : 0.0;
+    }
+    plotter_.plot(frame);
+
     // Same sign convention as the real node: roll and pitch are negated going
     // from the firmware's frame into odom.
     Eigen::Isometry3d transform{Eigen::Isometry3d::Identity()};
@@ -160,6 +186,11 @@ void hardware::SimSerial::onAimCommandReceivedCallback(
         command.issued_at = sample.getUserHeader().stamp_ns * 1e-9;
         command.valid = sample->control ? 1U : 0U;
         command.fire = (sample->control && on_target) ? 1U : 0U;
+        self->target_yaw_ = sample->target_yaw;
+        self->target_pitch_ = sample->target_pitch;
+        self->have_target_ = true;
+        self->control_ = sample->control;
+        self->fire_ = command.fire != 0;
         self->link_.publishCommand(command);
         LOG_DEBUG(self->logger_,
                   "aim -> sim: yaw {:.4f} pitch {:.4f} control {} fire {}",

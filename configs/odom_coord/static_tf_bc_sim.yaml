@@ -1,0 +1,33 @@
+# Camera extrinsics of the SIMULATOR, not the vehicle.
+log_level: Info
+publish_interval_ms: 1000
+
+static_broudcaster_conf:
+  transforms:
+    - parent_frame_id: map
+      child_frame_id: odom
+      translation:
+        x: 0.0
+        y: 0.0
+        z: 0.0
+      rpy_angle:
+        roll: 0.0
+        pitch: 0.0
+        yaw: 0.0
+    # NOTE: odom到gimbal的变换由serial发布
+    - parent_frame_id: gimbal
+      child_frame_id: camera
+      translation:
+        # The simulator's camera pose, derived from RmRobot.proto's joint
+        # chain: camera at (0.1008, -0.0752, 0.0563) in the pitch frame, the
+        # pitch solid flipped 180 deg about z, gimbal centre at the yaw/pitch
+        # axis intersection (0, 0, 0.168).  The values the real robot uses
+        # (0, -0.045, 0.0857) put the reconstructed armour 4.5 cm sideways
+        # and 3 cm high at bench range.
+        x: 0.1008
+        y: 0.0
+        z: 0.0563
+      rpy_angle:
+        roll: -90.0
+        pitch: 0.0
+        yaw: -90.0
