@@ -411,19 +411,32 @@ void auto_aim::TrackerNode::onArmorsReceivedCallback(
   // NOTE: 下面的都是发布调试波形的了
   if (!self->configs_.plot_info)
     return;
+  // One datagram per frame with the IMAGE stamp inside: phase-level analysis
+  // of a fast spinner (344 deg/s) needs alignment far better than UDP
+  // arrival time, whose jitter alone smears +-17 deg.  Values named odom/*
+  // really are in odom -- the old per-key series carried camera-frame
+  // numbers under an "...odom..." name.
+  const double stamp_sec =
+      std::chrono::duration_cast<std::chrono::duration<double>>(
+          image_stamp.time_since_epoch())
+          .count();
   if (!armors.empty()) {
     const auto &armor = armors.front();
-    auto armor_name = rfl::enum_to_string(armor.color) +
-                      rfl::enum_to_string(armor.type) +
-                      self->configs_.odom_frame_id;
-    auto rpy = armor.getRpy();
-    auto xyz = armor.position;
-    self->plotter_.plot(armor_name + "Roll", tools::radian2Angle(rpy(0)));
-    self->plotter_.plot(armor_name + "Pitch", tools::radian2Angle(rpy(1)));
-    self->plotter_.plot(armor_name + "Yaw", tools::radian2Angle(rpy(2)));
-    self->plotter_.plot(armor_name + "X", xyz.x());
-    self->plotter_.plot(armor_name + "Y", xyz.y());
-    self->plotter_.plot(armor_name + "Z", xyz.z());
+    const Eigen::Vector3d p_odom = T_camera_to_odom * armor.position;
+    const Eigen::Matrix3d R_odom =
+        T_camera_to_odom.linear() * armor.orientation.toRotationMatrix();
+    const Eigen::Vector3d rpy_odom = tools::rotationMatrixToRPY(R_odom);
+    nlohmann::json frame;
+    frame["obs/stamp"] = stamp_sec;
+    frame["obs/color"] = static_cast<int>(armor.color);
+    frame["obs/cam_x"] = armor.position.x();
+    frame["obs/cam_y"] = armor.position.y();
+    frame["obs/cam_z"] = armor.position.z();
+    frame["obs/odom_x"] = p_odom.x();
+    frame["obs/odom_y"] = p_odom.y();
+    frame["obs/odom_z"] = p_odom.z();
+    frame["obs/odom_yaw"] = tools::radian2Angle(rpy_odom.z());
+    self->plotter_.plot(frame);
   }
   auto aiming_target = self->aiming_target_.load();
   if (!self->targets_.contains(aiming_target)) // Negative
@@ -431,33 +444,27 @@ void auto_aim::TrackerNode::onArmorsReceivedCallback(
   // 发布正在瞄准目标的观测器状态
   const auto &target_ptr = self->targets_.at(aiming_target);
   auto state = target_ptr->getTargetTrackState().first;
-  auto type_name = rfl::enum_to_string(state.type);
-  self->plotter_.plot(type_name + "x", state.center_position.x());
-  self->plotter_.plot(type_name + "y", state.center_position.y());
-  self->plotter_.plot(type_name + "z", state.center_position.z());
-  self->plotter_.plot(type_name + "vx", state.center_velocity.x());
-  self->plotter_.plot(type_name + "vy", state.center_velocity.y());
-  self->plotter_.plot(type_name + "vz", state.center_velocity.z());
-  self->plotter_.plot(type_name + "yaw", tools::radian2Angle(state.center_yaw));
-  self->plotter_.plot(type_name + "vyaw",
-                      tools::radian2Angle(state.center_vyaw));
+  nlohmann::json ekf;
+  ekf["ekf/stamp"] = stamp_sec;
+  ekf["ekf/x"] = state.center_position.x();
+  ekf["ekf/y"] = state.center_position.y();
+  ekf["ekf/z"] = state.center_position.z();
+  ekf["ekf/vx"] = state.center_velocity.x();
+  ekf["ekf/vy"] = state.center_velocity.y();
+  ekf["ekf/vz"] = state.center_velocity.z();
+  ekf["ekf/yaw"] = tools::radian2Angle(state.center_yaw);
+  ekf["ekf/vyaw"] = tools::radian2Angle(state.center_vyaw);
   if (state.type == types::ArmorType::Outpost) {
-    auto r = target_ptr->get("r");
-    auto dz0 = target_ptr->get("dz0");
-    auto dz1 = target_ptr->get("dz1");
-    auto dz2 = target_ptr->get("dz2");
-    self->plotter_.plot(type_name + "r", r);
-    self->plotter_.plot(type_name + "dz_0", dz0);
-    self->plotter_.plot(type_name + "dz_1", dz1);
-    self->plotter_.plot(type_name + "dz_2", dz2);
+    ekf["ekf/r"] = target_ptr->get("r");
+    ekf["ekf/dz_0"] = target_ptr->get("dz0");
+    ekf["ekf/dz_1"] = target_ptr->get("dz1");
+    ekf["ekf/dz_2"] = target_ptr->get("dz2");
   } else if (state.type != types::ArmorType::Base) {
-    auto ra = target_ptr->get("ra");
-    auto rb = target_ptr->get("rb");
-    auto dz = target_ptr->get("dz");
-    self->plotter_.plot(type_name + "r_a", ra);
-    self->plotter_.plot(type_name + "r_b", rb);
-    self->plotter_.plot(type_name + "dz", dz);
+    ekf["ekf/r_a"] = target_ptr->get("ra");
+    ekf["ekf/r_b"] = target_ptr->get("rb");
+    ekf["ekf/dz"] = target_ptr->get("dz");
   }
+  self->plotter_.plot(ekf);
 }
 
 void auto_aim::TrackerNode::drawArmor(
