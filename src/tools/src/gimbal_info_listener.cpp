@@ -40,10 +40,16 @@ void hardware::GimbalInfoListener::onSampleReceivedCallback(
             .bullet_speed = sample->bullet_speed,
             .bullet_id = sample->bullet_id,
         });
+        self->stamp_ns_cache_.store(sample.getUserHeader().stamp_ns,
+                                    std::memory_order_relaxed);
       })) {
   }
 }
 
 msgs::GimbalInfo hardware::GimbalInfoListener::getLatestInfo() const {
   return cache_.load();
+}
+
+long hardware::GimbalInfoListener::getLatestStampNs() const {
+  return stamp_ns_cache_.load(std::memory_order_relaxed);
 }

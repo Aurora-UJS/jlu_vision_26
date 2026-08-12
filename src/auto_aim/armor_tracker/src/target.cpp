@@ -285,6 +285,12 @@ auto_aim::RobotTarget::track(const std::vector<types::Armor> &armors,
   double dt = std::chrono::duration_cast<std::chrono::duration<double>>(
                   stamp - track_state_.stamp_last_update)
                   .count();
+  // Out of LOST, stamp_last_update is the epoch-zero initial value or the
+  // moment tracking previously died -- either way "time since last update" is
+  // meaningless, and a huge dt blows up the covariance propagation inside the
+  // armour matching even though no motion factor consumes it yet.
+  if (track_state_.state == TrackState::State::LOST)
+    dt = 0.0;
   auto [estimated_target_state, updated_track_state] =
       update(selected_armors, dt, T_camera_to_odom);
   if (updated_track_state == TrackState::State::TRACKING) {
@@ -691,6 +697,12 @@ auto_aim::TrackState::State auto_aim::OutpostTarget::track(
   double dt = std::chrono::duration_cast<std::chrono::duration<double>>(
                   stamp - track_state_.stamp_last_update)
                   .count();
+  // Out of LOST, stamp_last_update is the epoch-zero initial value or the
+  // moment tracking previously died -- either way "time since last update" is
+  // meaningless, and a huge dt blows up the covariance propagation inside the
+  // armour matching even though no motion factor consumes it yet.
+  if (track_state_.state == TrackState::State::LOST)
+    dt = 0.0;
   auto [estimated_target_state, updated_track_state] =
       update(selected_armors, dt, T_camera_to_odom);
   if (updated_track_state == TrackState::State::TRACKING) {

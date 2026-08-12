@@ -21,6 +21,24 @@ constexpr int kSeqlockAttempts = 8;
 // The simulator steps at 32 ms; this bounds a stall rather than paces reads.
 constexpr auto kFrameTimeout = std::chrono::milliseconds(2000);
 constexpr auto kPollInterval = std::chrono::microseconds(500);
+
+// Pulls one numeric value out of the simulator's flat telemetry JSON
+// ({"key":value,...}, written by vision_monitor with std::to_string).  A
+// full JSON parser buys nothing here: the writer is ours and emits no
+// nesting, no strings, no whitespace.
+bool parseJsonNumber(const std::string &json, const char *key, double &out) {
+  const std::string needle = std::string("\"") + key + "\":";
+  const auto at = json.find(needle);
+  if (at == std::string::npos)
+    return false;
+  const char *begin = json.c_str() + at + needle.size();
+  char *end = nullptr;
+  const double value = std::strtod(begin, &end);
+  if (end == begin)
+    return false;
+  out = value;
+  return true;
+}
 }  // namespace
 
 hardware::SimCamera::SimCamera(quill::Logger *logger,
@@ -78,11 +96,18 @@ bool hardware::SimCamera::copyStableFrame(std::vector<uint8_t> &out,
     const uint64_t size = header->img_size;
     const uint32_t frame_width = header->width;
     const uint32_t frame_height = header->height;
+    const uint64_t json_offset = header->json_offset;
+    const uint64_t json_size = header->json_size;
     if (size == 0 || offset + size > mapping_size_)
       return false;
     out.resize(size);
     std::memcpy(out.data(), static_cast<const uint8_t *>(mapping_) + offset,
                 size);
+    if (json_size > 0 && json_offset + json_size <= mapping_size_)
+      json_scratch_.assign(static_cast<const char *>(mapping_) + json_offset,
+                           json_size);
+    else
+      json_scratch_.clear();
     std::atomic_thread_fence(std::memory_order_acquire);
     if (counter->load(std::memory_order_acquire) != before)
       continue;
@@ -130,7 +155,26 @@ bool hardware::SimCamera::readImage(
   if (sequence != last_sequence_)
     stall_warned_ = false;
   last_sequence_ = sequence;
-  stamp = std::chrono::system_clock::now();
+  // The whole pipeline runs on the simulator's clock: the frame's stamp is
+  // the sim_time the telemetry block carries (written in the same seqlock
+  // window as the pixels), mapped onto system_clock as seconds since the
+  // epoch.  Wall clock would break every dt the moment the simulation is
+  // paused, stepped, or runs off real-time -- and the tracker's first frame
+  // would see a dt of ~1.8e9 s against its epoch-zero initial stamp.
+  double sim_time = 0.0;
+  if (parseJsonNumber(json_scratch_, "sim_time", sim_time)) {
+    stamp = std::chrono::system_clock::time_point{
+        std::chrono::duration_cast<std::chrono::system_clock::duration>(
+            std::chrono::duration<double>(sim_time))};
+  } else {
+    if (!sim_time_warned_) {
+      LOG_WARNING(logger_,
+                  "Simulator telemetry has no sim_time field; falling back to "
+                  "wall-clock stamps. Rebuild the simulator controller.");
+      sim_time_warned_ = true;
+    }
+    stamp = std::chrono::system_clock::now();
+  }
 
   if (static_cast<int>(width) != expected_width_ ||
       static_cast<int>(height) != expected_height_) {

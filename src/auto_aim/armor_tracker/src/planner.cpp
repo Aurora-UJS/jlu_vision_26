@@ -84,11 +84,12 @@ auto_aim::Planner::getAimingArmorIndexPredictTimeFireThres(
 msgs::AimCommand auto_aim::Planner::plan(
     const TargetState &target_state,
     const std::chrono::system_clock::time_point &target_stamp,
+    const std::chrono::system_clock::time_point &now_stamp,
     const msgs::GimbalInfo &gimbal_info) {
   std::scoped_lock lk{cache_mtx_};
   auto dt_image_to_now_sec =
-      std::chrono::duration_cast<std::chrono::duration<double>>(
-          std::chrono::system_clock::now() - target_stamp)
+      std::chrono::duration_cast<std::chrono::duration<double>>(now_stamp -
+                                                                target_stamp)
           .count();
   predict_time_cache_ =
       dt_image_to_now_sec +

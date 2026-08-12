@@ -22,6 +22,11 @@ public:
                              .instance = "serial",
                              .event = "data"});
   msgs::GimbalInfo getLatestInfo() const;
+  // Header stamp of the latest sample, in whatever clock the serial backend
+  // stamps with (wall time on the vehicle, sim time against the simulator).
+  // Callers needing "now" for latency arithmetic must use this instead of
+  // the system clock, or the two clocks diverge in simulation.
+  long getLatestStampNs() const;
 
 private:
   quill::Logger *logger_;
@@ -32,6 +37,7 @@ private:
   iox::popo::Subscriber<msgs::GimbalInfo, msgs::Header> gimbal_info_sub_;
   iox::popo::Listener listener_;
   std::atomic<msgs::GimbalInfo> cache_;
+  std::atomic<long> stamp_ns_cache_{0};
 };
 
 } // namespace hardware

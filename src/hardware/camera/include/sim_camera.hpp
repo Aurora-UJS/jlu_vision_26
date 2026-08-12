@@ -37,7 +37,8 @@ public:
 
 private:
   // Copies one stable frame out of the segment, or returns false if the writer
-  // was mid-update through every attempt.
+  // was mid-update through every attempt.  The telemetry JSON is copied inside
+  // the same seqlock window, so json_scratch_ describes exactly this frame.
   bool copyStableFrame(std::vector<uint8_t> &out, uint64_t &sequence,
                        uint32_t &width, uint32_t &height);
 
@@ -49,8 +50,10 @@ private:
   std::size_t mapping_size_ = 0;
   uint64_t last_sequence_ = 0;
   std::vector<uint8_t> scratch_;
+  std::string json_scratch_;
   bool geometry_warned_ = false;
   bool stall_warned_ = false;
+  bool sim_time_warned_ = false;
 };
 
 }  // namespace hardware

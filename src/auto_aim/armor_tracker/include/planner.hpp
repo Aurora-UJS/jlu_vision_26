@@ -20,9 +20,15 @@ class Planner {
 public:
   Planner(quill::Logger *logger, const PlannerConfig &config);
 
+  // now_stamp is the freshest timestamp in the pipeline's clock -- the
+  // gimbal-info header stamp, not std::chrono::system_clock::now().  The
+  // prediction horizon is (now_stamp - target_stamp) + predict_offset; taking
+  // "now" from the system clock instead would break against the simulator,
+  // whose stamps advance on sim time.
   msgs::AimCommand
   plan(const TargetState &target_state,
        const std::chrono::system_clock::time_point &target_stamp,
+       const std::chrono::system_clock::time_point &now_stamp,
        const msgs::GimbalInfo &gimbal_info);
 
   std::tuple<ArmorPositionYaw, ArmorIndex, double, double, double>
