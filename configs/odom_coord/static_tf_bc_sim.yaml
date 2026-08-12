@@ -18,15 +18,20 @@ static_broudcaster_conf:
     - parent_frame_id: gimbal
       child_frame_id: camera
       translation:
-        # The simulator's camera pose, derived from RmRobot.proto's joint
-        # chain: camera at (0.1008, -0.0752, 0.0563) in the pitch frame, the
-        # pitch solid flipped 180 deg about z, gimbal centre at the yaw/pitch
-        # axis intersection (0, 0, 0.168).  The values the real robot uses
-        # (0, -0.045, 0.0857) put the reconstructed armour 4.5 cm sideways
-        # and 3 cm high at bench range.
-        x: 0.1008
-        y: 0.0
-        z: 0.0563
+        # Camera offset from the gimbal centre (yaw/pitch axis intersection),
+        # derived from RmRobot.proto's joint chain: 0.1008 m forward along
+        # the boresight, 0.0563 m above it, centred laterally.
+        #
+        # CONVENTION: Transform::getIsometry3d() applies rotation-then-
+        # translate (T x = R x + R t), so this translation is expressed in
+        # the CHILD (camera optical, x right / y down / z forward) frame:
+        # forward -> +z, up -> -y.  The vehicle's own yaml follows the same
+        # convention -- writing the offset in parent-frame axes here is what
+        # rotated the camera lever arm by 90 deg and sank every
+        # reconstruction ~6 cm.
+        x: 0.0
+        y: -0.0563
+        z: 0.1008
       rpy_angle:
         roll: -90.0
         pitch: 0.0
