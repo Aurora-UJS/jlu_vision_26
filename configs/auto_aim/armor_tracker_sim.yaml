@@ -44,25 +44,25 @@ robot_conf:
     y: 0.1
     z: 0.1
   velocity_prior_noise:
-    x: 0.5
-    y: 0.5
-    z: 0.5
+    x: 0.1
+    y: 0.1
+    z: 0.1
   yaw_factor_noise: 0.005
-  vyaw_factor_noise: 0.15
+  vyaw_factor_noise: 0.05
   translation_factor_noise:
     x: 0.001
     y: 0.001
     z: 0.001
   velocity_factor_noise:
-    x: 0.01
-    y: 0.01
-    z: 0.01
+    x: 0.003
+    y: 0.003
+    z: 0.003
   radius_prior_noise: 0.05
   radius_min: 0.15
-  default_radius: 0.26
+  default_radius: 0.24
   radius_max: 0.5
   dz_prior_noise: 0.1
-  default_dz: 0.0
+  default_dz: 0.08
   armor_observation_noise:
     pixel_error:
       x: 2.0

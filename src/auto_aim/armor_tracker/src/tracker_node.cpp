@@ -268,7 +268,8 @@ auto_aim::TrackerNode::TrackerNode(quill::Logger *logger,
               cv::imshow("tracker", copy);
               cv::waitKey(1);
             });
-  LOG_INFO(logger_, "Tracker node initialization complete!");
+  LOG_INFO(logger_, "Tracker node initialization complete! plot_info={}",
+           configs_.plot_info);
 }
 
 std::optional<double> auto_aim::TrackerNode::getPixelDistanceToImageCenter(

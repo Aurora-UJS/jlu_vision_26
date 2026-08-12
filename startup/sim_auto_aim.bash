@@ -91,7 +91,10 @@ fi
 "${bin}/static_tf_bc" -c configs/odom_coord/static_tf_bc_sim.yaml -l logs/tf \
   >/tmp/rm_sim_tf.log 2>&1 &
 sleep 3
-"${bin}/armor_tracker" -c configs/auto_aim/armor_tracker_sim.yaml -l logs/tracker \
+# --debug: without it main() force-overrides plot_info/show_image to false
+# no matter what the yaml says -- the tracker's PlotJuggler telemetry (EKF
+# state, armour observations) only exists in debug mode.
+"${bin}/armor_tracker" --debug -c configs/auto_aim/armor_tracker_sim.yaml -l logs/tracker \
   >/tmp/rm_sim_tracker.log 2>&1 &
 
 sleep 5
