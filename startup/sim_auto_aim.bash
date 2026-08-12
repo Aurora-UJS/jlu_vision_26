@@ -4,7 +4,7 @@
 # The simulator publishes frames on /aurora_rm_vision and exchanges gimbal
 # angles on /aurora_rm_aim; start it first, e.g.
 #
-#   RM_SIM_INITIAL_YAW=1.5708 RM_SIM_INITIAL_PITCH=-0.1276 \
+#   RM_SIM_INITIAL_YAW=3.1416 RM_SIM_INITIAL_PITCH=-0.1276 \
 #   RM_SIM_AIM_ALWAYS_ENGAGED=1 webots worlds/auto_aim_bench.wbt
 #
 # Pass --viz to turn on the detector's own result windows.
@@ -34,11 +34,36 @@ mkdir -p logs/camera logs/serial logs/detector
 # itself before ever starting anything.
 # One pattern per call: pkill takes a single pattern, and extra arguments make
 # it fail with a usage error -- silently killing nothing behind the || true.
-for node in camera serial armor_detector armor_tracker static_tf_bc \
-            sim_viewer iox-roudi; do
+nodes=(camera serial armor_detector armor_tracker static_tf_bc \
+       sim_viewer iox-roudi)
+for node in "${nodes[@]}"; do
   pkill -x "${node}" 2>/dev/null || true
 done
-sleep 2
+# WAIT for them to actually die.  A previous RouDi holds a file lock through
+# its graceful-shutdown countdown (up to 40 s while it waits on clients), and
+# a fixed 2 s nap here twice launched a new RouDi straight into "Could not
+# acquire lock" -- which aborts it and, in cascade, every node below.
+# pgrep -x also reports zombies, so check /proc State instead.
+alive() {
+  for node in "${nodes[@]}"; do
+    for pid in $(pgrep -x "${node}" 2>/dev/null); do
+      state="$(awk '/^State:/{print $2}' "/proc/${pid}/status" 2>/dev/null)"
+      [[ -n "${state}" && "${state}" != "Z" ]] && return 0
+    done
+  done
+  return 1
+}
+for _ in $(seq 100); do
+  alive || break
+  sleep 0.25
+done
+if alive; then
+  echo "warning: pipeline processes survived SIGTERM, escalating to SIGKILL" >&2
+  for node in "${nodes[@]}"; do
+    pkill -9 -x "${node}" 2>/dev/null || true
+  done
+  sleep 1
+fi
 rm -f /dev/shm/iox1_* 2>/dev/null || true
 
 "${prefix}/bin/iox-roudi" -c configs/iox-roudi_config.toml >/tmp/rm_sim_roudi.log 2>&1 &
