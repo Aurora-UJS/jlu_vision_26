@@ -30,9 +30,15 @@ static_broudcaster_conf:
         # rotated the camera lever arm by 90 deg and sank every
         # reconstruction ~6 cm.
         x: 0.0
-        y: -0.0563
-        z: 0.1008
+        y: -0.065536
+        z: 0.095054
       rpy_angle:
-        roll: -90.0
+        # roll = -90 - 5.4: the camera's boresight sits 5.4 deg BELOW the
+        # pitch joint's zero line (a mounting slant, calibrated from the
+        # vertical miss distribution: shots grouped +0.170 m +- 0.012 over
+        # ~1.8 m once the launch elevation was tied to the joint).  In the
+        # ZYX convention the whole correction lands in the roll slot; the
+        # translation is re-expressed accordingly (child-frame convention).
+        roll: -95.4
         pitch: 0.0
         yaw: -90.0
