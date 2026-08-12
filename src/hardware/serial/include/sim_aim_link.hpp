@@ -30,7 +30,7 @@
 namespace aim {
 
 constexpr uint64_t kMagic = 0x41494D4C494E4B31ULL;  // "AIMLINK1"
-constexpr uint64_t kVersion = 1;
+constexpr uint64_t kVersion = 3;
 
 // Simulator -> aiming program.  Everything needed to turn a pixel target into
 // a gimbal command without guessing the simulator's state.
@@ -50,6 +50,9 @@ struct GimbalState {
   double pitch_velocity;    // rad/s
   double muzzle_speed;      // m/s, the speed a shot leaves at right now
   uint64_t frame_id;        // matches the PulseScope frame this pose belongs to
+  // Running score against the practice target, for a live hit-rate readout.
+  uint64_t shots_fired;
+  uint64_t target_hits;
   // --- ballistic model the simulator is actually integrating ---
   double projectile_mass;         // kg
   double projectile_diameter;     // m
@@ -63,13 +66,27 @@ struct GimbalState {
 };
 
 // Aiming program -> simulator.
+//
+// target_yaw/target_pitch carry the SMOOTHED gimbal solution (the MPC state
+// the vehicle firmware follows), not the raw aim reference -- the raw
+// reference steps at every armour switch and whips the simulated gimbal.
+// The velocities are the matching feedforward, mirroring the firmware link.
 struct AimCommand {
   uint64_t sequence;
-  double target_yaw;        // rad, absolute, same frame as GimbalState::yaw
-  double target_pitch;      // rad, absolute
-  double issued_at;         // sim_time the solution was computed for
-  uint32_t valid;           // zero means "no target", the gimbal holds
-  uint32_t fire;            // non-zero requests one shot
+  double target_yaw;             // rad, absolute, same frame as GimbalState::yaw
+  double target_pitch;           // rad, absolute
+  double target_yaw_velocity;    // rad/s, feedforward for the yaw loop
+  double target_pitch_velocity;  // rad/s, feedforward for the pitch loop
+  double target_yaw_acceleration;    // rad/s^2, inertia feedforward
+  double target_pitch_acceleration;  // rad/s^2
+  // The aimer's on-target window, re-checked by the simulator at the moment
+  // the ball actually spawns (the fire flag itself is up to two sim steps
+  // stale by then).
+  double fire_thres_yaw;         // rad
+  double fire_thres_pitch;       // rad
+  double issued_at;              // sim_time the solution was computed for
+  uint32_t valid;                // zero means "no target", the gimbal holds
+  uint32_t fire;                 // non-zero requests one shot
 };
 
 struct Block {

@@ -56,6 +56,9 @@ private:
   // thresholds without racing the state thread.
   std::atomic<double> yaw_{0.0};
   std::atomic<double> pitch_{0.0};
+  // Latest simulator time; the aim link's issued_at is expressed in this
+  // frame so the simulator can compute a sane command age.
+  std::atomic<double> latest_sim_time_{0.0};
   iox::popo::Publisher<msgs::TaskMode, msgs::Header> task_mode_pub_;
   iox::popo::Publisher<msgs::GimbalInfo, msgs::Header> gimbal_info_pub_;
   iox::popo::Publisher<msgs::EnemyColor, msgs::Header> enemy_color_pub_;
@@ -66,6 +69,8 @@ private:
   tools::Plotter plotter_;
   double target_yaw_ = 0.0;
   double target_pitch_ = 0.0;
+  double mpc_yaw_ = 0.0;
+  double mpc_pitch_ = 0.0;
   bool have_target_ = false;
   bool control_ = false;
   bool fire_ = false;

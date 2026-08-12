@@ -141,8 +141,13 @@ auto_aim::TrackerNode::TrackerNode(quill::Logger *logger,
         continue; // 无锁定状态
       }
       auto gimbal_info = gimbal_listener_.getLatestInfo();
+      // "Now" in the pipeline's clock is the gimbal stamp, not the system
+      // clock -- against the simulator the two run on different time bases.
+      const std::chrono::system_clock::time_point now_stamp{
+          std::chrono::nanoseconds{gimbal_listener_.getLatestStampNs()}};
       auto cmd = planner_.plan(aiming_target_state_opt->first,
-                               aiming_target_state_opt->second, gimbal_info);
+                               aiming_target_state_opt->second, now_stamp,
+                               gimbal_info);
       // TODO: this->hit_target_.load()
       if (!cmd.control) {
         LOG_WARNING(logger_, "Aimcommand not control!");

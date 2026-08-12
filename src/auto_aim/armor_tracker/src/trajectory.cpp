@@ -78,8 +78,16 @@ auto_aim::Trajectory::solveTarget(const TargetState &target_state,
   }
   auto pitch_flytime_opt = this->solver_.resolvePitchFlyTime(
       distance, target_state.center_position.z(), bullet_speed);
-  if (!pitch_flytime_opt.has_value())
+  if (!pitch_flytime_opt.has_value()) {
+    LOG_WARNING(logger_,
+                "[Trajectory]: Unsolvable d={:.3f} z={:.3f} speed={:.1f} "
+                "center=({:.2f},{:.2f},{:.2f})",
+                distance, target_state.center_position.z(), bullet_speed,
+                target_state.center_position.x(),
+                target_state.center_position.y(),
+                target_state.center_position.z());
     return std::nullopt;
+  }
   auto selected_index =
       selectArmor(target_state.predict(pitch_flytime_opt->fly_time));
   last_armor_index_ = selected_index;
