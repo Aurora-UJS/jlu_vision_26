@@ -134,7 +134,14 @@ planner_conf:
   iterative_traj: false
   shoot_offset: 0
   yaw_offset: 0.0
-  pitch_offset: 0.0
+  # Bench shim: the simulator now launches along the muzzle's true axis
+  # (elevation = -joint - 0.158) while this pipeline's TF still carries the
+  # fitted 6.7 deg slant, leaving a ~2.3 deg vertical mismatch.  0.041 rad is
+  # the best-scoring compensation, but the closed loop erodes roughly half of
+  # any offset (the extrinsic belief feeds back through the z estimate), so
+  # the real fix is adapting the TF/ballistic chain to the ground-truth
+  # geometry -- see rm_vision_simulator/webots/tools/awakening/README.md.
+  pitch_offset: 0.041
   predict_offset_ms: 73
   max_yaw_acc: 50.0
   Q_yaw: [9e6, 0]
